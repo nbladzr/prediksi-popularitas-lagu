@@ -1,106 +1,123 @@
 import streamlit as st
-import pandas as pd
-import numpy as np
 import joblib
-import os
+import numpy as np
 
-# =========================================================
-# LOAD MODEL DENGAN PARAMETER
-# =========================================================
+# =========================
+# LOAD MODEL
+# =========================
 @st.cache_resource
-def load_model(model_name):
-    return joblib.load(model_name)
+def load_model():
+    return joblib.load("model.pkl")
 
-# =========================================================
-# STREAMLIT UI
-# =========================================================
-st.set_page_config(page_title="Prediksi Popularitas Lagu", layout="centered")
+model = load_model()
 
-st.title("🎵 Prediksi Popularitas Lagu")
-st.write("Gunakan model Machine Learning untuk memprediksi popularitas lagu.")
-
-# =========================================================
-# PILIH MODEL DARI FILE YANG ADA DI FOLDER
-# =========================================================
-available_models = []
-
-for file in os.listdir():
-    if file.endswith(".pkl") or file.startswith("pipeline"):
-        available_models.append(file)
-
-if len(available_models) == 0:
-    st.error("❌ Tidak ada file model ditemukan di folder!")
-    st.stop()
-
-model_choice = st.selectbox(
-    "Pilih Model (.pkl / pipeline_reg / pipeline_clf):",
-    available_models
+# =========================
+# PAGE CONFIG
+# =========================
+st.set_page_config(
+    page_title="Prediksi Popularitas Lagu",
+    page_icon="🎵",
+    layout="centered"
 )
 
-# Load model sesuai pilihan
-model = load_model(model_choice)
-st.success(f"Model aktif: **{model_choice}**")
+# =========================
+# CUSTOM CSS AGAR MIRIP UI DI SCREENSHOT
+# =========================
+st.markdown("""
+<style>
+    .title-center {
+        text-align: center;
+        font-size: 42px !important;
+        font-weight: 700 !important;
+        margin-top: -30px;
+    }
 
-# =========================================================
-# MODE INPUT
-# =========================================================
-menu = st.radio("Pilih Mode Input:", ["Upload CSV", "Input Manual"])
+    .subtitle-center {
+        text-align: center;
+        font-size: 18px;
+        color: #cccccc;
+        margin-bottom: 30px;
+    }
 
-# =========================================================
-# MODE UPLOAD CSV
-# =========================================================
-if menu == "Upload CSV":
-    uploaded_file = st.file_uploader("Upload file CSV", type=["csv"])
+    .upload-box {
+        border: 2px dashed #444 !important;
+        padding: 40px;
+        border-radius: 10px;
+        background-color: #1e1e1e;
+    }
+
+    .block-container {
+        padding-top: 40px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# =========================
+# HEADER PERSIS SEPERTI UI GAMBAR
+# =========================
+st.markdown("<h1 class='title-center'>🎵 Prediksi Popularitas Lagu</h1>", unsafe_allow_html=True)
+st.markdown(
+    "<p class='subtitle-center'>Upload file atau input fitur secara manual untuk memprediksi popularitas lagu.</p>",
+    unsafe_allow_html=True
+)
+
+# =========================
+# PILIH MODE INPUT
+# =========================
+mode = st.radio("Pilih Mode Input:", ["Upload CSV", "Input Manual"])
+
+# =========================
+# MODE 1: UPLOAD CSV
+# =========================
+if mode == "Upload CSV":
+    st.write("Upload file CSV")
+
+    uploaded_file = st.file_uploader(
+        " ",
+        type=["csv"],
+        label_visibility="collapsed"
+    )
 
     if uploaded_file:
+        import pandas as pd
         df = pd.read_csv(uploaded_file)
-        st.write("📄 Data Input:")
-        st.dataframe(df)
 
         try:
-            pred = model.predict(df)
-            df["Prediksi"] = pred
-            st.success("Prediksi berhasil!")
-            st.dataframe(df)
+            preds = model.predict(df)
+            st.success("Berhasil memproses CSV!")
+            st.write("Hasil Prediksi:")
+            st.write(preds)
+        except:
+            st.error("Format CSV tidak sesuai fitur model!")
 
-            csv_output = df.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                "Download Hasil Prediksi",
-                csv_output,
-                "hasil_prediksi.csv",
-                "text/csv"
-            )
-        except Exception as e:
-            st.error(f"❌ Error saat prediksi: {e}")
-
-# =========================================================
-# MODE INPUT MANUAL
-# =========================================================
+# =========================
+# MODE 2: INPUT MANUAL
+# =========================
 else:
-    st.subheader("Input Fitur Lagu")
+    st.write("Isi fitur secara manual:")
 
     danceability = st.slider("Danceability", 0.0, 1.0, 0.5)
     energy = st.slider("Energy", 0.0, 1.0, 0.5)
-    loudness = st.number_input("Loudness", -60.0, 0.0, -10.0)
-    speechiness = st.slider("Speechiness", 0.0, 1.0, 0.05)
-    acousticness = st.slider("Acousticness", 0.0, 1.0, 0.1)
+    loudness = st.slider("Loudness", -60.0, 0.0, -10.0)
+    acousticness = st.slider("Acousticness", 0.0, 1.0, 0.5)
+    speechiness = st.slider("Speechiness", 0.0, 1.0, 0.5)
     instrumentalness = st.slider("Instrumentalness", 0.0, 1.0, 0.0)
-    liveness = st.slider("Liveness", 0.0, 1.0, 0.15)
-    valence = st.slider("Valence", 0.0, 1.0, 0.4)
-    tempo = st.number_input("Tempo", 60.0, 220.0, 120.0)
+    liveness = st.slider("Liveness", 0.0, 1.0, 0.2)
+    valence = st.slider("Valence", 0.0, 1.0, 0.5)
+    tempo = st.slider("Tempo", 50.0, 200.0, 120.0)
+
+    input_data = np.array([[
+        danceability,
+        energy,
+        loudness,
+        acousticness,
+        speechiness,
+        instrumentalness,
+        liveness,
+        valence,
+        tempo
+    ]])
 
     if st.button("Prediksi"):
-        input_data = pd.DataFrame([[
-            danceability, energy, loudness, speechiness,
-            acousticness, instrumentalness, liveness, valence, tempo
-        ]], columns=[
-            "danceability", "energy", "loudness", "speechiness",
-            "acousticness", "instrumentalness", "liveness",
-            "valence", "tempo"
-        ])
-
-        try:
-            pred = model.predict(input_data)[0]
-            st.success(f"Hasil Prediksi ({model_choice}): **{pred}**")
-        except Exception as e:
-            st.error(f"❌ Error: {e}")
+        pred = model.predict(input_data)[0]
+        st.success(f"Hasil Prediksi Popularitas Lagu: {pred}")
