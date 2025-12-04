@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
-import gzip
 
 # =========================================================
 # CONFIG STREAMLIT
@@ -14,11 +13,11 @@ st.write("Prediksi popularitas lagu menggunakan model Machine Learning (Pipeline
 
 
 # =========================================================
-# LOAD PIPELINE MODEL (.pkl.gz)
+# LOAD PIPELINE MODEL 
 # =========================================================
 @st.cache_resource
 def load_pipeline():
-    with gzip.open("pipeline_reg.pkl.gz", "rb") as f:
+    with gzip.open("pipeline_reg.pkl", "rb") as f:
         return joblib.load(f)
 
 pipeline = load_pipeline()
