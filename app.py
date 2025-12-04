@@ -1,10 +1,9 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import joblib
 
 # =========================================================
-# LOAD MODEL
+# LOAD MODEL PIPELINE
 # =========================================================
 @st.cache_resource
 def load_model():
@@ -39,7 +38,6 @@ if menu == "Upload CSV":
             st.success("Prediksi berhasil!")
             st.dataframe(df)
 
-            # Download
             csv_output = df.to_csv(index=False).encode("utf-8")
             st.download_button(
                 "Download Hasil Prediksi",
@@ -48,13 +46,13 @@ if menu == "Upload CSV":
                 "text/csv"
             )
         except Exception as e:
-            st.error(f"Terjadi error saat memprediksi: {e}")
+            st.error(f"❌ Terjadi error saat memprediksi: {e}")
 
 # =========================================================
 # MODE 2: INPUT MANUAL
 # =========================================================
 else:
-    st.subheader("Input Fitur Lagu")
+    st.subheader("Input Fitur Lagu (sesuai pipeline model)")
 
     danceability = st.slider("Danceability", 0.0, 1.0, 0.5)
     energy = st.slider("Energy", 0.0, 1.0, 0.5)
@@ -66,15 +64,30 @@ else:
     valence = st.slider("Valence", 0.0, 1.0, 0.4)
     tempo = st.number_input("Tempo", 60.0, 220.0, 120.0)
 
-    if st.button("Prediksi"):
-        input_data = pd.DataFrame([[
-            danceability, energy, loudness, speechiness, acousticness,
-            instrumentalness, liveness, valence, tempo
-        ]], columns=[
-            "danceability", "energy", "loudness", "speechiness",
-            "acousticness", "instrumentalness", "liveness",
-            "valence", "tempo"
-        ])
+    # Kalau pipeline kamu butuh kolom lain (genre, subgenre, nama playlist)
+    # tambahkan di sini sesuai MODEL
+    playlist_genre = st.text_input("Playlist Genre", "pop")
+    playlist_subgenre = st.text_input("Playlist Subgenre", "dance pop")
+    playlist_name = st.text_input("Playlist Name", "Top Hits")
 
-        pred = model.predict(input_data)[0]
-        st.success(f"Prediksi Popularitas Lagu: **{pred}**")
+    if st.button("Prediksi"):
+        input_data = pd.DataFrame([{
+            "danceability": danceability,
+            "energy": energy,
+            "loudness": loudness,
+            "speechiness": speechiness,
+            "acousticness": acousticness,
+            "instrumentalness": instrumentalness,
+            "liveness": liveness,
+            "valence": valence,
+            "tempo": tempo,
+            "playlist_genre": playlist_genre,
+            "playlist_subgenre": playlist_subgenre,
+            "playlist_name": playlist_name,
+        }])
+
+        try:
+            pred = model.predict(input_data)[0]
+            st.success(f"Prediksi Popularitas Lagu: **{pred}**")
+        except Exception as e:
+            st.error(f"❌ Error prediksi: {e}")
