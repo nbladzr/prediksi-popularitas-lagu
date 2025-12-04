@@ -1,14 +1,32 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import os
+import zipfile
+import joblib
 
-from sklearn.model_selection import train_test_split
-from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.pipeline import Pipeline
-from sklearn.ensemble import RandomForestRegressor
+# ============================
+# (NEW) 0. EXTRACT ZIP MODEL
+# ============================
+def extract_if_needed(zip_path, target_pkl):
+    """Extract if PKL not found."""
+    if not os.path.exists(target_pkl):
+        if os.path.exists(zip_path):
+            with zipfile.ZipFile(zip_path, "r") as z:
+                z.extractall()
+            print(f"Extracted: {zip_path}")
+        else:
+            print(f"ZIP not found: {zip_path}")
+    else:
+        print(f"PKL already exists: {target_pkl}")
 
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+# Sesuaikan nama ZIP dengan file kamu
+extract_if_needed("pipeline_reg.zip", "pipeline_reg.pkl")
+
+# Try load model
+loaded_pipeline = None
+if os.path.exists("pipeline_reg.pkl"):
+    loaded_pipeline = joblib.load("pipeline_reg.pkl")
 
 
 # ============================
@@ -41,7 +59,6 @@ def load_data():
 
     return df
 
-
 df = load_data()
 
 st.subheader("📌 Sample Dataset")
@@ -56,7 +73,6 @@ categorical_features = df.select_dtypes(include=['object']).columns.tolist()
 
 # Hilangkan target dari fitur kategorikal
 if "track_popularity" in numeric_features:
-    numeric_features = list(numeric_features)
     numeric_features.remove("track_popularity")
 
 target = "track_popularity"
@@ -68,6 +84,12 @@ y = df[target]
 # ============================
 # 4. BUILD PIPELINE
 # ============================
+from sklearn.model_selection import train_test_split
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearn.ensemble import RandomForestRegressor
+
 numeric_transformer = StandardScaler()
 categorical_transformer = OneHotEncoder(handle_unknown='ignore')
 
@@ -86,20 +108,28 @@ pipeline = Pipeline(steps=[
 
 
 # ============================
-# 5. TRAIN MODEL
+# 5. TRAIN MODEL (only if no ZIP model)
 # ============================
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42
-)
+if loaded_pipeline is None:
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
 
-pipeline.fit(X_train, y_train)
-
-y_pred = pipeline.predict(X_test)
+    pipeline.fit(X_train, y_train)
+    y_pred = pipeline.predict(X_test)
+else:
+    pipeline = loaded_pipeline
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
+    y_pred = pipeline.predict(X_test)
 
 
 # ============================
 # 6. TAMPILKAN METRIK
 # ============================
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
 st.subheader("📊 Model Performance")
 
 st.write(f"**MAE:** {mean_absolute_error(y_test, y_pred):.3f}")
