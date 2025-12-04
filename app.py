@@ -1,135 +1,96 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import joblib
+import gzip
 
-from sklearn.model_selection import train_test_split
-from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.pipeline import Pipeline
-from sklearn.ensemble import RandomForestRegressor
+# =========================================================
+# CONFIG STREAMLIT
+# =========================================================
+st.set_page_config(page_title="Spotify Popularity Predictor", layout="centered")
 
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-
-
-# ============================
-# 1. JUDUL APLIKASI
-# ============================
-st.title("🎵 Spotify Track Popularity Predictor")
-st.write("Aplikasi untuk memprediksi popularitas lagu berdasarkan fitur audio Spotify.")
+st.title("🎵 Spotify Popularity Predictor")
+st.write("Prediksi popularitas lagu menggunakan model Machine Learning (Pipeline).")
 
 
-# ============================
-# 2. LOAD DATASET
-# ============================
-@st.cache_data
-def load_data():
-    df = pd.read_csv("low_popularity_spotify_data.csv")
+# =========================================================
+# LOAD PIPELINE MODEL (.pkl.gz)
+# =========================================================
+@st.cache_resource
+def load_pipeline():
+    with gzip.open("pipeline_reg.pkl.gz", "rb") as f:
+        return joblib.load(f)
 
-    # Drop kolom yang tidak dipakai
-    identifier_cols = ["id", "uri", "track_href", "analysis_url"]
-    df = df.drop(columns=[c for c in identifier_cols if c in df.columns], errors="ignore")
-
-    # Imputasi nilai hilang
-    num_cols = df.select_dtypes(include=['int64', 'float64']).columns
-    cat_cols = df.select_dtypes(include=['object']).columns
-
-    for col in num_cols:
-        df[col] = df[col].fillna(df[col].median())
-
-    for col in cat_cols:
-        df[col] = df[col].fillna(df[col].mode()[0])
-
-    return df
+pipeline = load_pipeline()
 
 
-df = load_data()
-
-st.subheader("📌 Sample Dataset")
-st.dataframe(df.head())
-
-
-# ============================
-# 3. DEFINE FEATURES & TARGET
-# ============================
-numeric_features = df.select_dtypes(include=['int64', 'float64']).columns.tolist()
-categorical_features = df.select_dtypes(include=['object']).columns.tolist()
-
-# Hilangkan target dari fitur kategorikal
-if "track_popularity" in numeric_features:
-    numeric_features = list(numeric_features)
-    numeric_features.remove("track_popularity")
-
-target = "track_popularity"
-
-X = df[numeric_features + categorical_features]
-y = df[target]
+# =========================================================
+# MODE PILIHAN
+# =========================================================
+menu = st.radio("Pilih Mode Input:", ["Upload CSV", "Input Manual"])
 
 
-# ============================
-# 4. BUILD PIPELINE
-# ============================
-numeric_transformer = StandardScaler()
-categorical_transformer = OneHotEncoder(handle_unknown='ignore')
+# =========================================================
+# MODE 1 — UPLOAD CSV
+# =========================================================
+if menu == "Upload CSV":
+    st.subheader("📂 Upload CSV untuk Prediksi Batch")
 
-preprocessor = ColumnTransformer(
-    transformers=[
-        ("num", numeric_transformer, numeric_features),
-        ("cat", categorical_transformer, categorical_features)
-    ],
-    remainder="drop"
-)
+    uploaded = st.file_uploader("Upload file CSV", type=["csv"])
 
-pipeline = Pipeline(steps=[
-    ("preprocess", preprocessor),
-    ("model", RandomForestRegressor(n_estimators=200, random_state=42))
-])
+    if uploaded is not None:
+        df = pd.read_csv(uploaded)
+        st.write("📄 Data yang diupload:")
+        st.dataframe(df)
 
+        try:
+            pred = pipeline.predict(df)
+            df["Prediksi Popularitas"] = pred
 
-# ============================
-# 5. TRAIN MODEL
-# ============================
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42
-)
+            st.success("Prediksi berhasil!")
+            st.dataframe(df)
 
-pipeline.fit(X_train, y_train)
-
-y_pred = pipeline.predict(X_test)
-
-
-# ============================
-# 6. TAMPILKAN METRIK
-# ============================
-st.subheader("📊 Model Performance")
-
-st.write(f"**MAE:** {mean_absolute_error(y_test, y_pred):.3f}")
-st.write(f"**RMSE:** {np.sqrt(mean_squared_error(y_test, y_pred)):.3f}")
-st.write(f"**R² Score:** {r2_score(y_test, y_pred):.3f}")
+            # Download hasil
+            csv_output = df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "Download Hasil Prediksi",
+                csv_output,
+                "hasil_prediksi.csv",
+                "text/csv"
+            )
+        except Exception as e:
+            st.error(f"❌ Error saat memprediksi: {e}")
 
 
-# ============================
-# 7. FORM INPUT PREDIKSI
-# ============================
-st.subheader("🎯 Prediksi Popularitas Lagu Baru")
+# =========================================================
+# MODE 2 — INPUT MANUAL
+# =========================================================
+else:
+    st.subheader("🎯 Input Manual Fitur Lagu")
 
-user_input = {}
+    # --- INPUT NUMERIC ---
+    danceability = st.slider("Danceability", 0.0, 1.0, 0.5)
+    energy = st.slider("Energy", 0.0, 1.0, 0.5)
+    loudness = st.number_input("Loudness (dB)", -60.0, 0.0, -10.0)
+    speechiness = st.slider("Speechiness", 0.0, 1.0, 0.05)
+    acousticness = st.slider("Acousticness", 0.0, 1.0, 0.1)
+    instrumentalness = st.slider("Instrumentalness", 0.0, 1.0, 0.0)
+    liveness = st.slider("Liveness", 0.0, 1.0, 0.15)
+    valence = st.slider("Valence", 0.0, 1.0, 0.4)
+    tempo = st.number_input("Tempo", 60.0, 220.0, 120.0)
 
-# Form numeric
-for col in numeric_features:
-    user_input[col] = st.number_input(f"{col}", value=float(df[col].median()))
+    if st.button("Prediksi Popularitas 🎵"):
+        input_df = pd.DataFrame([[
+            danceability, energy, loudness, speechiness,
+            acousticness, instrumentalness, liveness, valence, tempo
+        ]], columns=[
+            "danceability", "energy", "loudness", "speechiness",
+            "acousticness", "instrumentalness", "liveness",
+            "valence", "tempo"
+        ])
 
-# Form categorical
-for col in categorical_features:
-    unique_vals = df[col].unique().tolist()
-    user_input[col] = st.selectbox(f"{col}", unique_vals)
-
-# Convert ke DataFrame 1 row
-input_df = pd.DataFrame([user_input])
-
-
-# ============================
-# 8. PREDIKSI
-# ============================
-if st.button("Prediksi Popularitas 🎵"):
-    pred = pipeline.predict(input_df)[0]
-    st.success(f"Perkiraan Popularitas Lagu: **{pred:.2f} / 100**")
+        try:
+            pred = pipeline.predict(input_df)[0]
+            st.success(f"🎧 Prediksi Popularitas Lagu: **{pred:.2f} / 100**")
+        except Exception as e:
+            st.error(f"❌ Error saat memprediksi: {e}")
