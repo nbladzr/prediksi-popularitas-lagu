@@ -2,54 +2,61 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
+import os
 
 # =========================================================
-# CONFIG STREAMLIT
-# =========================================================
-st.set_page_config(page_title="Spotify Popularity Predictor", layout="centered")
-
-st.title("🎵 Spotify Popularity Predictor")
-st.write("Prediksi popularitas lagu menggunakan model Machine Learning (Pipeline).")
-
-
-# =========================================================
-# LOAD PIPELINE MODEL 
+# LOAD MODEL DARI PILIHAN USER
 # =========================================================
 @st.cache_resource
-def load_pipeline():
-    with gzip.open("pipeline_reg.pkl", "rb") as f:
-        return joblib.load(f)
-
-pipeline = load_pipeline()
-
+def load_model(model_name):
+    return joblib.load(model_name)
 
 # =========================================================
-# MODE PILIHAN
+# STREAMLIT UI
+# =========================================================
+st.set_page_config(page_title="Prediksi Popularitas Lagu", layout="centered")
+
+st.title("🎵 Prediksi Popularitas Lagu")
+st.write("Gunakan salah satu model Machine Learning untuk prediksi popularitas lagu.")
+
+# =========================================================
+# PILIH MODEL
+# =========================================================
+available_models = []
+
+# Cek file di folder
+for file in os.listdir():
+    if file.startswith("pipeline") or file.endswith(".pkl"):
+        available_models.append(file)
+
+model_choice = st.selectbox("Pilih Model yang Akan Digunakan:", available_models)
+
+model = load_model(model_choice)
+
+st.success(f"Model aktif: **{model_choice}**")
+
+# =========================================================
+# MODE INPUT
 # =========================================================
 menu = st.radio("Pilih Mode Input:", ["Upload CSV", "Input Manual"])
 
-
 # =========================================================
-# MODE 1 — UPLOAD CSV
+# MODE 1: UPLOAD CSV
 # =========================================================
 if menu == "Upload CSV":
-    st.subheader("📂 Upload CSV untuk Prediksi Batch")
+    uploaded_file = st.file_uploader("Upload file CSV", type=["csv"])
 
-    uploaded = st.file_uploader("Upload file CSV", type=["csv"])
-
-    if uploaded is not None:
-        df = pd.read_csv(uploaded)
-        st.write("📄 Data yang diupload:")
+    if uploaded_file is not None:
+        df = pd.read_csv(uploaded_file)
+        st.write("📄 Data input:")
         st.dataframe(df)
 
         try:
-            pred = pipeline.predict(df)
-            df["Prediksi Popularitas"] = pred
-
-            st.success("Prediksi berhasil!")
+            pred = model.predict(df)
+            df["Prediksi"] = pred
+            st.success("Prediksi selesai!")
             st.dataframe(df)
 
-            # Download hasil
             csv_output = df.to_csv(index=False).encode("utf-8")
             st.download_button(
                 "Download Hasil Prediksi",
@@ -58,19 +65,17 @@ if menu == "Upload CSV":
                 "text/csv"
             )
         except Exception as e:
-            st.error(f"❌ Error saat memprediksi: {e}")
-
+            st.error(f"Error saat prediksi: {e}")
 
 # =========================================================
-# MODE 2 — INPUT MANUAL
+# MODE 2: INPUT MANUAL
 # =========================================================
 else:
-    st.subheader("🎯 Input Manual Fitur Lagu")
+    st.subheader("Input Fitur Lagu")
 
-    # --- INPUT NUMERIC ---
     danceability = st.slider("Danceability", 0.0, 1.0, 0.5)
     energy = st.slider("Energy", 0.0, 1.0, 0.5)
-    loudness = st.number_input("Loudness (dB)", -60.0, 0.0, -10.0)
+    loudness = st.number_input("Loudness", -60.0, 0.0, -10.0)
     speechiness = st.slider("Speechiness", 0.0, 1.0, 0.05)
     acousticness = st.slider("Acousticness", 0.0, 1.0, 0.1)
     instrumentalness = st.slider("Instrumentalness", 0.0, 1.0, 0.0)
@@ -78,8 +83,8 @@ else:
     valence = st.slider("Valence", 0.0, 1.0, 0.4)
     tempo = st.number_input("Tempo", 60.0, 220.0, 120.0)
 
-    if st.button("Prediksi Popularitas 🎵"):
-        input_df = pd.DataFrame([[
+    if st.button("Prediksi"):
+        input_data = pd.DataFrame([[
             danceability, energy, loudness, speechiness,
             acousticness, instrumentalness, liveness, valence, tempo
         ]], columns=[
@@ -89,7 +94,7 @@ else:
         ])
 
         try:
-            pred = pipeline.predict(input_df)[0]
-            st.success(f"🎧 Prediksi Popularitas Lagu: **{pred:.2f} / 100**")
+            pred = model.predict(input_data)[0]
+            st.success(f"Hasil Prediksi ({model_choice}): **{pred}**")
         except Exception as e:
-            st.error(f"❌ Error saat memprediksi: {e}")
+            st.error(f"Terjadi error: {e}")
