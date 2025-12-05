@@ -4,14 +4,13 @@ import numpy as np
 import joblib
 
 # =========================================================
-# LOAD MODEL
+# LOAD MODEL PIPELINE
 # =========================================================
 @st.cache_resource
 def load_model():
-    return joblib.load("model.pkl")
+    return joblib.load("model.pkl")  # pipeline full: preprocess + model
 
 model = load_model()
-MODEL_FEATURES = list(model.feature_names_in_)
 
 # =========================================================
 # STREAMLIT UI
@@ -19,46 +18,45 @@ MODEL_FEATURES = list(model.feature_names_in_)
 st.set_page_config(page_title="Prediksi Popularitas Lagu", layout="centered")
 
 st.title("🎵 Prediksi Popularitas Lagu")
-st.write("Upload CSV atau input manual untuk memprediksi popularitas lagu.")
+st.write("Gunakan CSV atau input manual untuk memprediksi popularitas lagu.")
 
-menu = st.radio("Pilih Mode Input:", ["Upload CSV", "Input Manual"])
-
+mode = st.radio("Pilih Mode Input:", ["Upload CSV", "Input Manual"])
 
 # =========================================================
 # MODE 1: UPLOAD CSV
 # =========================================================
-if menu == "Upload CSV":
-    uploaded_file = st.file_uploader("Upload file CSV", type=["csv"])
+if mode == "Upload CSV":
+    uploaded = st.file_uploader("Upload file CSV", type=["csv"])
+    
+    if uploaded is not None:
+        df = pd.read_csv(uploaded)
 
-    if uploaded_file is not None:
-        df = pd.read_csv(uploaded_file)
         st.write("📄 Data yang diupload:")
         st.dataframe(df)
 
-        # Cek apakah kolom cocok dengan model
-        missing_features = [col for col in MODEL_FEATURES if col not in df.columns]
-
-        if missing_features:
-            st.error("❌ Kolom pada CSV tidak cocok dengan model!")
-            st.warning(f"Kolom yang hilang: {missing_features[:20]} ...")
-        else:
+        try:
             pred = model.predict(df)
+
             df["Prediksi Popularitas"] = pred
             st.success("Prediksi berhasil!")
             st.dataframe(df)
 
-            csv_output = df.to_csv(index=False).encode("utf-8")
-            st.download_button("Download Hasil Prediksi",
-                               csv_output,
-                               "hasil_prediksi.csv",
-                               "text/csv")
+            st.download_button(
+                "Download Hasil Prediksi",
+                df.to_csv(index=False).encode("utf-8"),
+                "hasil_prediksi.csv",
+                "text/csv"
+            )
 
+        except Exception as e:
+            st.error("❌ CSV tidak cocok dengan struktur dataset saat training.")
+            st.write(e)
 
 # =========================================================
 # MODE 2: INPUT MANUAL
 # =========================================================
 else:
-    st.subheader("Input Fitur Lagu (Manual)")
+    st.subheader("Input Fitur Manual")
 
     danceability = st.slider("Danceability", 0.0, 1.0, 0.5)
     energy = st.slider("Energy", 0.0, 1.0, 0.5)
@@ -70,12 +68,13 @@ else:
     valence = st.slider("Valence", 0.0, 1.0, 0.4)
     tempo = st.number_input("Tempo", 60.0, 220.0, 120.0)
 
-    if st.button("Prediksi"):
-        # DataFrame kosong sesuai fitur model
-        input_df = pd.DataFrame([np.zeros(len(MODEL_FEATURES))], columns=MODEL_FEATURES)
+    # NOTE:
+    # Pipeline akan otomatis encode + scale + preprocessing
+    # Jadi cukup kirim kolom yang sama dengan dataset original.
 
-        # Isi 9 fitur utama
-        for col, val in {
+    if st.button("Prediksi"):
+        # Buat dataframe 1 baris sesuai dataset original
+        data = pd.DataFrame([{
             "danceability": danceability,
             "energy": energy,
             "loudness": loudness,
@@ -84,10 +83,9 @@ else:
             "instrumentalness": instrumentalness,
             "liveness": liveness,
             "valence": valence,
-            "tempo": tempo,
-        }.items():
-            if col in input_df.columns:
-                input_df[col] = val
+            "tempo": tempo
+        }])
 
-        pred = model.predict(input_df)[0]
-        st.success(f"Prediksi Popularitas Lagu: **{pred}**")
+        pred = model.predict(data)[0]
+
+        st.success(f"Prediksi Popularitas Lagu: **{pred:.2f}**")
