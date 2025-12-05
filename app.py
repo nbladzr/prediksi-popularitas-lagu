@@ -1,91 +1,91 @@
 import streamlit as st
-import pandas as pd
+import pickle
 import numpy as np
-import joblib
+import pandas as pd
 
-# =========================================================
-# LOAD MODEL PIPELINE
-# =========================================================
+# ================================
+# 1. Load Model PKL (3 model)
+# ================================
 @st.cache_resource
-def load_model():
-    return joblib.load("model.pkl")  # pipeline full: preprocess + model
+def load_models():
+    with open("model.pkl", "rb") as f:
+        models = pickle.load(f)
+    return models
 
-model = load_model()
+models = load_models()
 
-# =========================================================
-# STREAMLIT UI
-# =========================================================
-st.set_page_config(page_title="Prediksi Popularitas Lagu", layout="centered")
+regressor   = models["regressor"]
+classifier  = models["classifier"]
+clustering  = models["clustering"]
 
-st.title("🎵 Prediksi Popularitas Lagu")
-st.write("Gunakan CSV atau input manual untuk memprediksi popularitas lagu.")
+# ================================
+# 2. Judul Aplikasi
+# ================================
+st.title("🎵 Prediksi Popularitas Lagu Spotify")
+st.write("Aplikasi ini memprediksi popularitas lagu menggunakan 3 model ML: Regressor, Classifier, dan Clustering.")
 
-mode = st.radio("Pilih Mode Input:", ["Upload CSV", "Input Manual"])
+st.write("---")
 
-# =========================================================
-# MODE 1: UPLOAD CSV
-# =========================================================
-if mode == "Upload CSV":
-    uploaded = st.file_uploader("Upload file CSV", type=["csv"])
+# ================================
+# 3. Input Fitur
+# ================================
+st.header("🔧 Input Fitur Lagu")
+
+danceability   = st.number_input("Danceability", 0.0, 1.0, 0.5)
+energy         = st.number_input("Energy", 0.0, 1.0, 0.5)
+loudness       = st.number_input("Loudness", -60.0, 5.0, -8.0)
+speechiness    = st.number_input("Speechiness", 0.0, 1.0, 0.05)
+acousticness   = st.number_input("Acousticness", 0.0, 1.0, 0.1)
+instrumentalness = st.number_input("Instrumentalness", 0.0, 1.0, 0.0)
+liveness       = st.number_input("Liveness", 0.0, 1.0, 0.2)
+valence        = st.number_input("Valence", 0.0, 1.0, 0.5)
+tempo          = st.number_input("Tempo", 40.0, 250.0, 120.0)
+duration_ms    = st.number_input("Duration (ms)", 10000, 500000, 200000)
+
+# Feature engineering (harus sama dengan training)
+TrackLength_min = duration_ms / 60000
+EnergyLevel = "High" if energy > 0.6 else "Low"
+
+# Convert kategorikal jadi numeric dummy
+df_input = pd.DataFrame({
+    "danceability": [danceability],
+    "energy": [energy],
+    "loudness": [loudness],
+    "speechiness": [speechiness],
+    "acousticness": [acousticness],
+    "instrumentalness": [instrumentalness],
+    "liveness": [liveness],
+    "valence": [valence],
+    "tempo": [tempo],
+    "TrackLength_min": [TrackLength_min],
+    "EnergyLevel_High": [1 if EnergyLevel == "High" else 0],
+})
+
+st.write("---")
+
+# ================================
+# 4. Tombol Prediksi
+# ================================
+if st.button("🎯 Prediksi Sekarang"):
     
-    if uploaded is not None:
-        df = pd.read_csv(uploaded)
+    # Pastikan input sesuai kolom model
+    input_reg = df_input.reindex(columns=regressor.feature_names_in_, fill_value=0)
+    input_clf = df_input.reindex(columns=classifier.feature_names_in_, fill_value=0)
+    input_cluster = df_input.reindex(columns=clustering.feature_names_in_, fill_value=0)
 
-        st.write("📄 Data yang diupload:")
-        st.dataframe(df)
+    # Prediksi
+    reg_pred = regressor.predict(input_reg)[0]
+    clf_pred = classifier.predict(input_clf)[0]
+    cluster_pred = clustering.predict(input_cluster)[0]
 
-        try:
-            pred = model.predict(df)
+    # ================================
+    # 5. Output
+    # ================================
+    st.subheader("📌 Hasil Prediksi")
+    
+    st.success(f"⭐ **Prediksi Popularitas (Regresi): `{reg_pred:.2f}`**")
+    st.info(f"📊 **Kategori Popularitas (Classifier): `{clf_pred}`**")
+    st.warning(f"🎧 **Cluster Lagu (KMeans): `{cluster_pred}`**")
 
-            df["Prediksi Popularitas"] = pred
-            st.success("Prediksi berhasil!")
-            st.dataframe(df)
+    st.write("Prediksi berhasil menggunakan 3 model Machine Learning dari model.pkl")
 
-            st.download_button(
-                "Download Hasil Prediksi",
-                df.to_csv(index=False).encode("utf-8"),
-                "hasil_prediksi.csv",
-                "text/csv"
-            )
-
-        except Exception as e:
-            st.error("❌ CSV tidak cocok dengan struktur dataset saat training.")
-            st.write(e)
-
-# =========================================================
-# MODE 2: INPUT MANUAL
-# =========================================================
-else:
-    st.subheader("Input Fitur Manual")
-
-    danceability = st.slider("Danceability", 0.0, 1.0, 0.5)
-    energy = st.slider("Energy", 0.0, 1.0, 0.5)
-    loudness = st.number_input("Loudness", -60.0, 0.0, -10.0)
-    speechiness = st.slider("Speechiness", 0.0, 1.0, 0.05)
-    acousticness = st.slider("Acousticness", 0.0, 1.0, 0.1)
-    instrumentalness = st.slider("Instrumentalness", 0.0, 1.0, 0.0)
-    liveness = st.slider("Liveness", 0.0, 1.0, 0.15)
-    valence = st.slider("Valence", 0.0, 1.0, 0.4)
-    tempo = st.number_input("Tempo", 60.0, 220.0, 120.0)
-
-    # NOTE:
-    # Pipeline akan otomatis encode + scale + preprocessing
-    # Jadi cukup kirim kolom yang sama dengan dataset original.
-
-    if st.button("Prediksi"):
-        # Buat dataframe 1 baris sesuai dataset original
-        data = pd.DataFrame([{
-            "danceability": danceability,
-            "energy": energy,
-            "loudness": loudness,
-            "speechiness": speechiness,
-            "acousticness": acousticness,
-            "instrumentalness": instrumentalness,
-            "liveness": liveness,
-            "valence": valence,
-            "tempo": tempo
-        }])
-
-        pred = model.predict(data)[0]
-
-        st.success(f"Prediksi Popularitas Lagu: **{pred:.2f}**")
